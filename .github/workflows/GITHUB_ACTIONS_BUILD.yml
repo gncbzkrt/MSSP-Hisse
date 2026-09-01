@@ -38,28 +38,35 @@ jobs:
           gradle-version: '8.9'
 
       - name: MSSP Android kaynagini otomatik bul
+        shell: bash
         run: |
+          set -e
+
           echo "======================================"
           echo "REPO DOSYALARI"
           echo "======================================"
+
           find . -maxdepth 3 -type f | sort
 
           rm -rf android staging
           mkdir -p android staging
 
-          # 1. Önce doğrudan Android SOURCE zip ara
           SOURCE_ZIP=$(find . -maxdepth 3 -type f \
             \( -iname "MSSP_ANDROID_SOURCE*.zip" \
             -o -iname "*ANDROID*SOURCE*.zip" \) \
             | head -n 1)
 
           if [ -n "$SOURCE_ZIP" ]; then
+
+            echo
             echo "Android kaynak ZIP bulundu:"
             echo "$SOURCE_ZIP"
 
             unzip -q "$SOURCE_ZIP" -d android
 
           else
+
+            echo
             echo "Dogrudan Android SOURCE bulunamadi."
             echo "Dis paketlerin ici kontrol ediliyor..."
 
@@ -85,7 +92,6 @@ jobs:
 
             if [ -z "$INNER_ZIP" ]; then
               echo "HATA: Dis paketin icinde Android SOURCE bulunamadi."
-              echo "Paket icerigi:"
               find staging -type f
               exit 1
             fi
@@ -96,10 +102,11 @@ jobs:
             unzip -q "$INNER_ZIP" -d android
           fi
 
-          echo.
+          echo
           echo "======================================"
           echo "ANDROID PROJE KONTROLU"
           echo "======================================"
+
           find android -maxdepth 2 -type f | sort
 
           if [ ! -f "android/settings.gradle.kts" ] && \
@@ -114,15 +121,20 @@ jobs:
             exit 1
           fi
 
+          echo
           echo "Android proje yapisi DOGRU."
 
       - name: Imzali Release APK derle
         working-directory: android
         run: |
+          set -e
           gradle --no-daemon assembleRelease
 
       - name: APK dosyasini bul
+        shell: bash
         run: |
+          set -e
+
           APK=$(find android/app/build/outputs/apk/release \
             -type f -name "*.apk" | head -n 1)
 
@@ -148,6 +160,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -e
+
           TAG="mssp-build-${GITHUB_RUN_NUMBER}"
 
           gh release create "$TAG" MSSP_PERSONAL.apk \
