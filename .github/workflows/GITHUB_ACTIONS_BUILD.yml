@@ -37,81 +37,64 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: MSSP Android kaynagini otomatik bul
+      - name: MSSP Android kaynagini hazirla
         shell: bash
         run: |
           set -e
 
           echo "======================================"
-          echo "REPO DOSYALARI"
+          echo "MSSP KAYNAK ARANIYOR"
           echo "======================================"
 
-          find . -maxdepth 3 -type f | sort
-
-          rm -rf android staging
-          mkdir -p android staging
-
           SOURCE_ZIP=$(find . -maxdepth 3 -type f \
-            \( -iname "MSSP_ANDROID_SOURCE*.zip" \
-            -o -iname "*ANDROID*SOURCE*.zip" \) \
+            -iname "MSSP_ANDROID_SOURCE*.zip" \
+            -o -iname "*ANDROID*SOURCE*.zip" \
             | head -n 1)
 
-          if [ -n "$SOURCE_ZIP" ]; then
-
-            echo
-            echo "Android kaynak ZIP bulundu:"
-            echo "$SOURCE_ZIP"
-
-            unzip -q "$SOURCE_ZIP" -d android
-
-          else
-
-            echo
-            echo "Dogrudan Android SOURCE bulunamadi."
-            echo "Dis paketlerin ici kontrol ediliyor..."
-
-            OUTER_ZIP=$(find . -maxdepth 2 -type f \
-              \( -iname "MSSP_PERSONAL*.zip" \
-              -o -iname "*MSSP*GITHUB*.zip" \) \
-              | head -n 1)
-
-            if [ -z "$OUTER_ZIP" ]; then
-              echo "HATA: MSSP kaynak ZIP dosyasi bulunamadi."
-              exit 1
-            fi
-
-            echo "Dis paket bulundu:"
-            echo "$OUTER_ZIP"
-
-            unzip -q "$OUTER_ZIP" -d staging
-
-            INNER_ZIP=$(find staging -type f \
-              \( -iname "MSSP_ANDROID_SOURCE*.zip" \
-              -o -iname "*ANDROID*SOURCE*.zip" \) \
-              | head -n 1)
-
-            if [ -z "$INNER_ZIP" ]; then
-              echo "HATA: Dis paketin icinde Android SOURCE bulunamadi."
-              find staging -type f
-              exit 1
-            fi
-
-            echo "Ic Android kaynak ZIP bulundu:"
-            echo "$INNER_ZIP"
-
-            unzip -q "$INNER_ZIP" -d android
+          if [ -z "$SOURCE_ZIP" ]; then
+            echo "HATA: Android kaynak ZIP bulunamadi."
+            find . -maxdepth 3 -type f | sort
+            exit 1
           fi
+
+          echo "Kaynak ZIP:"
+          echo "$SOURCE_ZIP"
+
+          rm -rf extracted android
+          mkdir -p extracted android
+
+          unzip -q "$SOURCE_ZIP" -d extracted
+
+          echo
+          echo "ZIP acildi. Proje koku araniyor..."
+
+          SETTINGS_FILE=$(find extracted -type f \
+            -name "settings.gradle.kts" -o -name "settings.gradle" \
+            | head -n 1)
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "HATA: settings.gradle veya settings.gradle.kts bulunamadi."
+            find extracted -maxdepth 4 -type f | sort
+            exit 1
+          fi
+
+          PROJECT_ROOT=$(dirname "$SETTINGS_FILE")
+
+          echo "Android proje koku bulundu:"
+          echo "$PROJECT_ROOT"
+
+          cp -R "$PROJECT_ROOT"/. android/
 
           echo
           echo "======================================"
           echo "ANDROID PROJE KONTROLU"
           echo "======================================"
 
-          find android -maxdepth 2 -type f | sort
+          ls -la android
 
           if [ ! -f "android/settings.gradle.kts" ] && \
              [ ! -f "android/settings.gradle" ]; then
-            echo "HATA: Android proje kok dosyasi bulunamadi."
+            echo "HATA: Proje koku duzeltilemedi."
             exit 1
           fi
 
@@ -126,6 +109,7 @@ jobs:
 
       - name: Imzali Release APK derle
         working-directory: android
+        shell: bash
         run: |
           set -e
           gradle --no-daemon assembleRelease
@@ -149,21 +133,4 @@ jobs:
 
           cp "$APK" MSSP_PERSONAL.apk
 
-      - name: APK artifact yukle
-        uses: actions/upload-artifact@v4
-        with:
-          name: MSSP-PERSONAL-APK
-          path: MSSP_PERSONAL.apk
-          retention-days: 30
-
-      - name: GitHub Release olustur
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-
-          TAG="mssp-build-${GITHUB_RUN_NUMBER}"
-
-          gh release create "$TAG" MSSP_PERSONAL.apk \
-            --title "MSSP PERSONAL Build ${GITHUB_RUN_NUMBER}" \
-            --notes "GitHub Actions ile otomatik uretilen MSSP PERSONAL Android APK."
+      - name: APK
