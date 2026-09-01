@@ -1,0 +1,66 @@
+name: MSSP PERSONAL APK Build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'MSSP_ANDROID_SOURCE.zip'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kaynak depoyu al
+        uses: actions/checkout@v4
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK kur
+        uses: android-actions/setup-android@v3
+
+      - name: Android 35 paketlerini kur
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Gradle kur
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: MSSP kaynagini ac
+        run: |
+          mkdir android
+          unzip -q MSSP_ANDROID_SOURCE.zip -d android
+
+      - name: Imzali Release APK derle
+        working-directory: android
+        run: gradle --no-daemon assembleRelease
+
+      - name: APK adini duzenle
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk MSSP_PERSONAL.apk
+
+      - name: APK artifact yukle
+        uses: actions/upload-artifact@v4
+        with:
+          name: MSSP-PERSONAL-APK
+          path: MSSP_PERSONAL.apk
+          retention-days: 30
+
+      - name: GitHub Release olustur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="mssp-build-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" MSSP_PERSONAL.apk \
+            --title "MSSP PERSONAL Build ${GITHUB_RUN_NUMBER}" \
+            --notes "GitHub Actions ile telefondan uretilen MSSP PERSONAL APK."
