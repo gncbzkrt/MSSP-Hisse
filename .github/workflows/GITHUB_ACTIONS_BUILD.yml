@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'MSSP_ANDROID_SOURCE.zip'
+      - '**/*.zip'
+      - '.github/workflows/**'
 
 permissions:
   contents: write
@@ -36,18 +37,105 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: MSSP kaynagini ac
+      - name: MSSP Android kaynagini otomatik bul
         run: |
-          mkdir android
-          unzip -q MSSP_ANDROID_SOURCE.zip -d android
+          echo "======================================"
+          echo "REPO DOSYALARI"
+          echo "======================================"
+          find . -maxdepth 3 -type f | sort
+
+          rm -rf android staging
+          mkdir -p android staging
+
+          # 1. Önce doğrudan Android SOURCE zip ara
+          SOURCE_ZIP=$(find . -maxdepth 3 -type f \
+            \( -iname "MSSP_ANDROID_SOURCE*.zip" \
+            -o -iname "*ANDROID*SOURCE*.zip" \) \
+            | head -n 1)
+
+          if [ -n "$SOURCE_ZIP" ]; then
+            echo "Android kaynak ZIP bulundu:"
+            echo "$SOURCE_ZIP"
+
+            unzip -q "$SOURCE_ZIP" -d android
+
+          else
+            echo "Dogrudan Android SOURCE bulunamadi."
+            echo "Dis paketlerin ici kontrol ediliyor..."
+
+            OUTER_ZIP=$(find . -maxdepth 2 -type f \
+              \( -iname "MSSP_PERSONAL*.zip" \
+              -o -iname "*MSSP*GITHUB*.zip" \) \
+              | head -n 1)
+
+            if [ -z "$OUTER_ZIP" ]; then
+              echo "HATA: MSSP kaynak ZIP dosyasi bulunamadi."
+              exit 1
+            fi
+
+            echo "Dis paket bulundu:"
+            echo "$OUTER_ZIP"
+
+            unzip -q "$OUTER_ZIP" -d staging
+
+            INNER_ZIP=$(find staging -type f \
+              \( -iname "MSSP_ANDROID_SOURCE*.zip" \
+              -o -iname "*ANDROID*SOURCE*.zip" \) \
+              | head -n 1)
+
+            if [ -z "$INNER_ZIP" ]; then
+              echo "HATA: Dis paketin icinde Android SOURCE bulunamadi."
+              echo "Paket icerigi:"
+              find staging -type f
+              exit 1
+            fi
+
+            echo "Ic Android kaynak ZIP bulundu:"
+            echo "$INNER_ZIP"
+
+            unzip -q "$INNER_ZIP" -d android
+          fi
+
+          echo.
+          echo "======================================"
+          echo "ANDROID PROJE KONTROLU"
+          echo "======================================"
+          find android -maxdepth 2 -type f | sort
+
+          if [ ! -f "android/settings.gradle.kts" ] && \
+             [ ! -f "android/settings.gradle" ]; then
+            echo "HATA: Android proje kok dosyasi bulunamadi."
+            exit 1
+          fi
+
+          if [ ! -f "android/app/build.gradle.kts" ] && \
+             [ ! -f "android/app/build.gradle" ]; then
+            echo "HATA: app Gradle dosyasi bulunamadi."
+            exit 1
+          fi
+
+          echo "Android proje yapisi DOGRU."
 
       - name: Imzali Release APK derle
         working-directory: android
-        run: gradle --no-daemon assembleRelease
-
-      - name: APK adini duzenle
         run: |
-          cp android/app/build/outputs/apk/release/app-release.apk MSSP_PERSONAL.apk
+          gradle --no-daemon assembleRelease
+
+      - name: APK dosyasini bul
+        run: |
+          APK=$(find android/app/build/outputs/apk/release \
+            -type f -name "*.apk" | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "HATA: Release APK bulunamadi."
+            find android/app/build/outputs -type f || true
+            exit 1
+          fi
+
+          echo "APK bulundu:"
+          echo "$APK"
+
+          cp "$APK" MSSP_PERSONAL.apk
 
       - name: APK artifact yukle
         uses: actions/upload-artifact@v4
@@ -61,6 +149,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="mssp-build-${GITHUB_RUN_NUMBER}"
+
           gh release create "$TAG" MSSP_PERSONAL.apk \
             --title "MSSP PERSONAL Build ${GITHUB_RUN_NUMBER}" \
-            --notes "GitHub Actions ile telefondan uretilen MSSP PERSONAL APK."
+            --notes "GitHub Actions ile otomatik uretilen MSSP PERSONAL Android APK."
