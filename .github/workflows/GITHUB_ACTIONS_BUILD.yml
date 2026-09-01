@@ -47,8 +47,8 @@ jobs:
           echo "======================================"
 
           SOURCE_ZIP=$(find . -maxdepth 3 -type f \
-            -iname "MSSP_ANDROID_SOURCE*.zip" \
-            -o -iname "*ANDROID*SOURCE*.zip" \
+            \( -iname "MSSP_ANDROID_SOURCE*.zip" \
+            -o -iname "*ANDROID*SOURCE*.zip" \) \
             | head -n 1)
 
           if [ -z "$SOURCE_ZIP" ]; then
@@ -69,7 +69,7 @@ jobs:
           echo "ZIP acildi. Proje koku araniyor..."
 
           SETTINGS_FILE=$(find extracted -type f \
-            -name "settings.gradle.kts" -o -name "settings.gradle" \
+            \( -name "settings.gradle.kts" -o -name "settings.gradle" \) \
             | head -n 1)
 
           if [ -z "$SETTINGS_FILE" ]; then
@@ -133,4 +133,22 @@ jobs:
 
           cp "$APK" MSSP_PERSONAL.apk
 
-      - name: APK
+      - name: APK artifact yukle
+        uses: actions/upload-artifact@v4
+        with:
+          name: MSSP-PERSONAL-APK
+          path: MSSP_PERSONAL.apk
+          retention-days: 30
+
+      - name: GitHub Release olustur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -e
+
+          TAG="mssp-build-${GITHUB_RUN_NUMBER}"
+
+          gh release create "$TAG" MSSP_PERSONAL.apk \
+            --title "MSSP PERSONAL Build ${GITHUB_RUN_NUMBER}" \
+            --notes "GitHub Actions ile otomatik uretilen MSSP PERSONAL Android APK."
